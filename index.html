@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Display</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+
+        #chat-container {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        #message-list {
+            width: 30%;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            padding: 16px;
+            background-color: #fafafa;
+        }
+
+        #message-list .message-item {
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #fff;
+            border: 1px solid #e0e0e0;
+            transition: background-color 0.2s;
+        }
+
+        #message-list .message-item:hover {
+            background-color: #e1f5fe;
+        }
+
+        #chat-content {
+            width: 70%;
+            padding: 16px;
+            overflow-y: auto;
+        }
+
+        #chat-messages .message {
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 8px;
+            max-width: 70%;
+        }
+
+        #chat-messages .message.user {
+            background-color: #e1f5fe; 
+            margin-right: auto; 
+            text-align: left; 
+        }
+
+        #chat-messages .message.bot {
+            background-color: #f5f5f5; 
+            margin-left: auto; 
+            text-align: right; 
+        }
+
+        #memory-requests {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        #interaction-buttons {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button#approve-access {
+            background-color: green;
+            color: white;
+        }
+
+        button#reject-access {
+            background-color: red;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="message-list">
+            <div class="message-item active" data-chat-id="0">Chat ID: 0</div>
+        </div>
+
+        <div id="chat-content">
+            <div id="chat-messages"></div>
+            <div id="memory-requests"></div>
+            <div id="interaction-buttons">
+                <button id="approve-access">Approve</button>
+                <button id="reject-access">Reject</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // getting DOM elements
+            const chatMessages = document.getElementById('chat-messages');
+            const memoryRequests = document.getElementById('memory-requests');
+            const approveButton = document.getElementById('approve-access');
+            const rejectButton = document.getElementById('reject-access');
+            const messageItems = document.querySelectorAll('#message-list .message-item');
+    
+            // ethereum provider
+            let provider;
+            let signer;
+            let host = 'http://localhost';
+            let port = 3000;
+
+            // Initialize provider and signer
+            if (window.ethereum) {
+                    // 请求连接钱包
+                    window.ethereum.request({ method: 'eth_requestAccounts' });
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    signer = provider.getSigner();
+                    
+                    const accounts = provider.listAccounts();
+                    if (!accounts.length) {
+                        console.log('no account, please link the wallet');
+                    }
+                    console.log('current account:", accounts[0]');
+                
+            } else {
+                alert('ethereum wallet not detected. Please install MetaMask');
+                return;
+            }
+    
+            // render chat messages
+            function renderMessages(messages) {
+                chatMessages.innerHTML = ''; 
+                messages.forEach(message => {
+                    const messageElement = document.createElement('div');
+                    messageElement.classList.add('message', message.role);
+                    messageElement.textContent = message.content;
+                    chatMessages.appendChild(messageElement);
+                });
+            }
+    
+            // load default messages
+            function loadDefaultMessages() {
+                const defaultMessages = [
+                    { role: 'bot', content: 'Can you need some help?' },
+                    { role: 'user', content: 'Let me see...' }
+                ];
+                renderMessages(defaultMessages);
+            }
+            loadDefaultMessages();
+
+            // Load chat
+            function loadChat(chatId, includeMemory = false) {
+                axios.get(`${host}:${port}/chat/${chatId}?includeMemory=${includeMemory}`)
+                    .then(response => {
+                        const data = response.data;
+                        renderMessages(data.messages); 
+                        memoryRequests.textContent = `Memory Request: ${data.memoryRequests.status}`;
+                    })
+                    .catch(error => {
+                        console.error('Error fetching chat messages:', error);
+                    });
+            }
+    
+            
+    
+            // click on message list item
+            messageItems.forEach(item => {
+                item.addEventListener('click', function () {
+                    const chatId = this.getAttribute('data-chat-id');
+                    loadChat(chatId, true); // Load full chat with memory
+                });
+            });
+            
+            // approve memory access
+            approveButton.addEventListener('click', async function () {
+                try {
+                    //  EIP-712标准信息
+                    const domain = {
+                        name: "Memory Display",//应用名称
+                        version: "1",
+                        chainId: 11155111, //测试网
+                        verifyingContract: "0x0FB00e0434f31c4a169990cecF616E7170F2197E"
+                    };
+    
+                    const message = {
+                        types: {
+                            MemoryApproval: [
+                                { name: 'chatId', type: "uint256" },
+                                { name: 'action', type: "string" },
+                            ]
+                        },
+                        domain,
+                        primaryType: "MemoryApproval",
+                        message: {
+                            chatId: 0,
+                            action: "approve"
+                        }
+                    };
+    
+                    //  sign the message
+                    const signature = await signer._signTypedData(domain, message.types, message.message);
+    
+                    // Send the signed message to the backend
+                    const response = await axios.post(`${host}:${port}/memory/approve-access`, {
+                        accessCode: signature
+                    });
+    
+                    const data = response.data;
+                    renderMessages(data.messages);
+                    memoryRequests.textContent = `Memory Request: ${data.memoryRequests.status}`;
+    
+                } catch (error) {
+                    console.error("Error during approval:", error);
+                }
+            });
+            
+            // Reject memory access
+            rejectButton.addEventListener('click', function () {
+                axios.post(`${host}:${port}/memory/reject-access`)
+                    .then(response => {
+                        const data = response.data;
+                        renderMessages(data.messages);
+                        memoryRequests.textContent = `Memory Request: ${data.memoryRequests.status}`;
+                    })
+                    .catch(error => {
+                        console.error('Error rejecting memory access:', error);
+                    });
+            });
+        });
+    </script>
+    
+</body>
+</html>
