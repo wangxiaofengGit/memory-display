@@ -3,7 +3,7 @@ a sample of memory chat
 
 ## Directory Structure
 ```
-    ├── index.jhtml                   ---client
+    ├── index.html                   ---client
     ├── index.js                      ---server
     └── package.json
 ```
